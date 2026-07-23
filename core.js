@@ -1,0 +1,376 @@
+// ══════════════════════════════════════════════════════
+//  THEME
+// ══════════════════════════════════════════════════════
+(function(){const t=localStorage.getItem('bmTheme')||'dark';document.documentElement.setAttribute('data-theme',t);})();
+window.toggleTheme=function(){const h=document.documentElement;const n=h.getAttribute('data-theme')==='dark'?'light':'dark';h.setAttribute('data-theme',n);localStorage.setItem('bmTheme',n);};
+
+// ══════════════════════════════════════════════════════
+//  DATA LAYER
+// ══════════════════════════════════════════════════════
+// ── Firebase REST DB ──
+const FB_BASE='https://bridgegate-1a2c6-default-rtdb.europe-west1.firebasedatabase.app';
+let CLUB_ID=null;   // resolved by initClubGate() before login is usable
+let CLUB_NAME=null; // human-readable club name, set once club info is loaded
+let FBURL=null;     // = FB_BASE + '/clubs/' + CLUB_ID + '/bm', set in setClub()
+const _cache={};
+
+// ── Offline write queue ──
+const _writeQueue=[];
+let _queueProcessing=false;
+async function _processQueue(){
+  if(_queueProcessing||!navigator.onLine||!_writeQueue.length)return;
+  _queueProcessing=true;
+  while(_writeQueue.length&&navigator.onLine){
+    const {url,method,body}=_writeQueue[0];
+    try{
+      await fetch(url,{method,headers:{'Content-Type':'application/json'},body});
+      _writeQueue.shift();
+      try{localStorage.setItem('bm_writeQueue',JSON.stringify(_writeQueue));}catch(e){}
+    }catch(e){break;}
+  }
+  _queueProcessing=false;
+}
+// Restore queue from localStorage on startup
+try{const q=JSON.parse(localStorage.getItem('bm_writeQueue')||'[]');if(Array.isArray(q))_writeQueue.push(...q);}catch(e){}
+window.addEventListener('online',()=>{
+  const b=document.getElementById('connBadge');
+  if(b){b.style.background='var(--greendim)';b.style.color='var(--green)';b.textContent='🟢 Online';}
+  _processQueue();
+  toast('✅ Back online — syncing...');
+});
+window.addEventListener('offline',()=>{
+  const b=document.getElementById('connBadge');
+  if(b){b.style.background='var(--reddim)';b.style.color='var(--red)';b.textContent='🔴 Offline';}
+  toast('⚠️ Offline — changes queued locally');
+});
+
+// ── PWA: register service worker for app-shell offline caching ──
+if('serviceWorker' in navigator){
+  window.addEventListener('load',()=>{
+    navigator.serviceWorker.register('service-worker.js').catch(()=>{
+      // service-worker.js not deployed alongside index.html — app still works online-only
+    });
+  });
+}
+
+async function fbUrl(path){
+  const token = window._authToken || (window._getAuthToken ? await window._getAuthToken() : null);
+  return FBURL+path+(token?('?auth='+token):'');
+}
+// Root-level (club-independent) requests: /clubs/*, /clubs_index, /superadmin/*
+async function fbRootUrl(path){
+  const token = window._authToken || (window._getAuthToken ? await window._getAuthToken() : null);
+  return FB_BASE+path+(token?('?auth='+token):'');
+}
+const DB={
+  async get(k){
+    try{const url=await fbUrl('/'+k+'.json');const r=await fetch(url,{cache:'no-store'});
+      if(!r.ok)return _cache[k]||null;
+      const v=await r.json();_cache[k]=v;return v;
+    }catch(e){return _cache[k]||null;}
+  },
+  async set(k,v){
+    _cache[k]=v;
+    const url=await fbUrl('/'+k+'.json');
+    if(!navigator.onLine){
+      _writeQueue.push({url,method:'PUT',body:JSON.stringify(v)});
+      try{localStorage.setItem('bm_writeQueue',JSON.stringify(_writeQueue));}catch(e){}
+      return;
+    }
+    try{await fetch(url,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(v)});}
+    catch(e){
+      console.warn('FB write fail, queuing',k);
+      _writeQueue.push({url,method:'PUT',body:JSON.stringify(v)});
+      try{localStorage.setItem('bm_writeQueue',JSON.stringify(_writeQueue));}catch(e){}
+    }
+  },
+  async del(k){
+    delete _cache[k];
+    const url=await fbUrl('/'+k+'.json');
+    if(!navigator.onLine){_writeQueue.push({url,method:'DELETE',body:null});return;}
+    try{await fetch(url,{method:'DELETE'});}
+    catch(e){_writeQueue.push({url,method:'DELETE',body:null});}
+  },
+  subscribe(k,cb){
+    let last=undefined;
+    const poll=async()=>{
+      try{const url=await fbUrl('/'+k+'.json');const r=await fetch(url,{cache:'no-store'});
+        if(r.ok){const v=await r.json();const s=JSON.stringify(v);
+          if(s!==last){last=s;_cache[k]=v;cb(v);}
+        }
+      }catch(e){}
+      setTimeout(poll,2000);
+    };
+    poll();
+  }
+};
+const getState=()=>_cache['state']||{name:'Bridge Tournament',tableCount:0,boardsPerRound:3,totalBoards:0,roundCount:0,currentRound:0,status:'setup',movement:'mitchell',phantom:false,scoring:'MP'};
+const setState=s=>DB.set('state',s);
+const getPairs=()=>_cache['pairs']||{};
+const setPairs=p=>DB.set('pairs',p);
+const getBoards=()=>_cache['boards']||{};
+const setBoards=b=>DB.set('boards',b);
+const getMovements=()=>_cache['movements']||{};
+const setMovements=m=>DB.set('movements',m);
+const getLogs=()=>_cache['logs']||[];
+const getArchives=()=>_cache['archives']||[];
+const setArchives=a=>DB.set('archives',a);
+const getApprovals=()=>_cache['approvals']||{};
+const setApprovals=a=>DB.set('approvals',a);
+
+async function preloadCache(){
+  const keys=['state','pairs','boards','movements','logs','archives','approvals','tableLocks','playerdb'];
+  await Promise.all(keys.map(k=>DB.get(k)));
+}
+
+function addLog(type,msg,detail=''){
+  const l=getLogs();l.unshift({id:Date.now(),type,msg,detail,time:new Date().toLocaleTimeString()});
+  if(l.length>300)l.splice(300);DB.set('logs',l);
+}
+
+// ══════════════════════════════════════════════════════
+//  BRIDGE SCORING
+// ══════════════════════════════════════════════════════
+const SUIT_VAL={'♣':20,'♦':20,'♥':30,'♠':30,'NT':30};
+const SUIT_FIRST={'♣':20,'♦':20,'♥':30,'♠':30,'NT':40};
+
+function calcScore(level,suit,declarer,result,vuln,doubled){
+  const isNS=declarer==='N'||declarer==='S';
+  const isVuln=(isNS&&(vuln==='NS'||vuln==='Both'))||(!isNS&&(vuln==='EW'||vuln==='Both'));
+  const dbl=doubled==='XX'?4:doubled==='X'?2:1;
+  if(result<0){
+    const u=Math.abs(result);let pen=0;
+    if(dbl===1){pen=u*(isVuln?100:50);}
+    else if(dbl===2){if(!isVuln){pen=u===1?100:u===2?300:500+(u-3)*300;}else{pen=u===1?200:u===2?500:800+(u-3)*300;}}
+    else{if(!isVuln){pen=u===1?200:u===2?600:1000+(u-3)*600;}else{pen=u===1?400:u===2?1000:1600+(u-3)*600;}}
+    return isNS?-pen:pen;
+  }
+  let trick=SUIT_FIRST[suit]+(level-1)*SUIT_VAL[suit];
+  if(dbl>1)trick*=dbl;
+  const game=trick>=100;
+  let bonus=game?(isVuln?500:300):50;
+  if(level===6)bonus+=isVuln?750:500;
+  if(level===7)bonus+=isVuln?1500:1000;
+  if(dbl===2)bonus+=50;if(dbl===4)bonus+=100;
+  let over=0;
+  if(result>0){if(dbl===1)over=result*SUIT_VAL[suit];else if(dbl===2)over=result*(isVuln?200:100);else over=result*(isVuln?400:200);}
+  const total=trick+over+bonus;
+  return isNS?total:-total;
+}
+
+function getVuln(boardNo){
+  const v=['None','NS','EW','Both','NS','EW','Both','None','Both','EW','NS','None','Both','NS','EW','None'];
+  return v[(boardNo-1)%16];
+}
+
+// IMP table
+const IMP_TABLE=[15,45,85,125,165,215,265,315,365,425,495,595,745,895,1095,1295,1495,1745,1995,2245,2495,2995,3495,3995];
+function scoreToIMP(diff){
+  const d=Math.abs(diff);let imp=0;
+  for(let i=0;i<IMP_TABLE.length;i++){if(d<IMP_TABLE[i]){imp=i;break;}if(i===IMP_TABLE.length-1)imp=24;}
+  return diff>=0?imp:-imp;
+}
+
+// ══════════════════════════════════════════════════════
+//  MATCHPOINT CALCULATION
+// ══════════════════════════════════════════════════════
+function calcMP(){
+  const boards=getBoards();const movements=getMovements();
+  const boardScores={};
+  Object.entries(boards).forEach(([key,b])=>{
+    if(b.status!=='done')return;
+    const[t,r,bn]=key.split('_');
+    // Group by physical board number only — the same board travels between
+    // tables across rounds (e.g. Board 1 is played at a different table each
+    // round), so comparisons must span all rounds, not just within one round.
+    const groupKey=bn;
+    if(!boardScores[groupKey])boardScores[groupKey]=[];
+    const m=movements[r+'_'+t]||{};
+    if(typeof b.nsScore!=='number')return;
+    boardScores[groupKey].push({ns:m.ns,ew:m.ew,nsScore:b.nsScore});
+  });
+  const pairMP={};
+  Object.entries(boardScores).forEach(([,scores])=>{
+    const n=scores.length;if(n<2)return;
+    const top=(n-1)*2;
+    scores.forEach(s=>{
+      let nsMP=0,ewMP=0;
+      scores.forEach(s2=>{
+        if(s===s2)return;
+        if(s.nsScore>s2.nsScore){nsMP+=2;}
+        else if(s.nsScore===s2.nsScore){nsMP+=1;ewMP+=1;}
+        else{ewMP+=2;}
+      });
+      if(s.ns){if(!pairMP[s.ns])pairMP[s.ns]={mp:0,boards:0,top:0};pairMP[s.ns].mp+=nsMP;pairMP[s.ns].boards++;pairMP[s.ns].top+=top;}
+      if(s.ew){if(!pairMP[s.ew])pairMP[s.ew]={mp:0,boards:0,top:0};pairMP[s.ew].mp+=ewMP;pairMP[s.ew].boards++;pairMP[s.ew].top+=top;}
+    });
+  });
+  return pairMP;
+}
+
+// ══════════════════════════════════════════════════════
+//  MOVEMENT GENERATORS
+// ══════════════════════════════════════════════════════
+function generateMitchell(tableCount, boardsPerRound, hasPhantom, totalBoards){
+  const movements={};const pairs={};
+  for(let i=1;i<=tableCount;i++) pairs['ns_'+i]={id:'ns_'+i,name:'NS '+i,dir:'NS',startTable:i,isPhantom:false};
+  for(let i=1;i<=tableCount;i++) pairs['ew_'+i]={id:'ew_'+i,name:'EW '+i,dir:'EW',startTable:i,isPhantom:false};
+  if(hasPhantom){pairs['phantom']={id:'phantom',name:'Phantom',dir:'EW',startTable:0,isPhantom:true};}
+  const rounds=boardsPerRound>0?Math.floor(totalBoards/boardsPerRound):tableCount;
+  const totalBoardSets=rounds;
+  for(let r=1;r<=rounds;r++){
+    for(let t=1;t<=tableCount;t++){
+      const ewIdx=((t+r-2)%tableCount)+1;
+      const boardSet=(((t-r)%tableCount+tableCount)%tableCount)%totalBoardSets;
+      const boardStart=boardSet*boardsPerRound+1;
+      const boardEnd=Math.min(boardStart+boardsPerRound-1,totalBoards);
+      movements[r+'_'+t]={ns:'ns_'+t,ew:'ew_'+ewIdx,boardStart,boardEnd};
+    }
+  }
+  return{movements,pairs,rounds};
+}
+
+function generateHowell(tableCount, boardsPerRound, totalBoards){
+  const movements={};const pairs={};
+  const pairCount=tableCount*2;
+  const rounds=boardsPerRound>0?Math.floor(totalBoards/boardsPerRound):pairCount-1;
+  for(let i=1;i<=pairCount;i++) pairs['p'+i]={id:'p'+i,name:'Pair '+i,dir:'',startTable:0,isPhantom:false};
+  const totalBoardSets=rounds;
+  for(let r=1;r<=rounds;r++){
+    const players=Array.from({length:pairCount},(_,i)=>i+1);
+    const fixed=players[0];const rotating=players.slice(1);
+    const roundRotated=[...rotating.slice(r-1),...rotating.slice(0,r-1)];
+    for(let t=1;t<=tableCount;t++){
+      const p1=t===1?fixed:roundRotated[t-1];
+      const p2=roundRotated[pairCount-1-t+1]||roundRotated[0];
+      const boardSet=((r+t-2)%totalBoardSets);
+      const boardStart=boardSet*boardsPerRound+1;
+      const boardEnd=Math.min(boardStart+boardsPerRound-1,totalBoards);
+      const ns=t%2===1?'p'+p1:'p'+p2;
+      const ew=t%2===1?'p'+p2:'p'+p1;
+      movements[r+'_'+t]={ns,ew,boardStart,boardEnd};
+    }
+  }
+  return{movements,pairs,rounds};
+}
+
+// ══════════════════════════════════════════════════════
+//  SWISS MOVEMENT (v1 — even pair counts only, no bye/phantom)
+// ══════════════════════════════════════════════════════
+
+// Round 1: random seed pairing (only called once, by the admin who starts
+// setup — no concurrency concern, so Math.random() here is safe).
+function generateSwissRound1(pairCount, boardsPerRound, roundCount){
+  const pairs={};
+  const ids=[];
+  for(let i=1;i<=pairCount;i++){ pairs['p'+i]={id:'p'+i,name:'Pair '+i,dir:'',startTable:0,isPhantom:false}; ids.push('p'+i); }
+  for(let i=ids.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [ids[i],ids[j]]=[ids[j],ids[i]]; }
+  const movements={};
+  for(let m=0;m<pairCount/2;m++){
+    const table=m+1;
+    const a=ids[m*2], b=ids[m*2+1];
+    const ns=a, ew=b; // round 1: arbitrary — first of the shuffled pair sits NS
+    movements['1_'+table]={ns,ew,boardStart:1,boardEnd:boardsPerRound};
+  }
+  return{movements,pairs,rounds:roundCount};
+}
+
+// Current standings, best first. Reuses calcMP() — safe because Swiss board
+// numbers never repeat across rounds, so calcMP's "group by board number"
+// logic naturally compares the right instances (same round, different tables)
+// without needing separate handling.
+function calcSwissStandingsArray(){
+  const pairMP=calcMP();
+  const pairs=getPairs();
+  const arr=Object.keys(pairs).filter(id=>!pairs[id].isPhantom).map(id=>{
+    const d=pairMP[id]||{mp:0,top:0,boards:0};
+    return{id, mp:d.mp||0, top:d.top||0, pct:(d.top>0?d.mp/d.top:0)};
+  });
+  arr.sort((a,b)=>b.pct-a.pct||(a.id<b.id?-1:1)); // deterministic tie-break by id
+  return arr;
+}
+
+// Set of "pairA|pairB" keys (alphabetically sorted) for every match already played.
+function getSwissPairingHistory(movements){
+  const played=new Set();
+  Object.values(movements).forEach(mv=>{
+    if(mv.ns&&mv.ew)played.add([mv.ns,mv.ew].sort().join('|'));
+  });
+  return played;
+}
+
+// Greedy pairing down the standings list, skipping rematches where possible.
+// Deterministic given the same standings+history — safe if two clients both
+// trigger generation at the same time, since they'll compute the same result.
+function pairSwissMatches(standings, history){
+  const remaining=standings.map(s=>s.id);
+  const matches=[];
+  while(remaining.length>0){
+    const a=remaining.shift();
+    let idx=remaining.findIndex(b=>!history.has([a,b].sort().join('|')));
+    if(idx===-1)idx=0; // everyone remaining already played `a` — forced rematch
+    const b=remaining.splice(idx,1)[0];
+    matches.push([a,b]);
+  }
+  return matches;
+}
+
+function generateSwissRoundMovements(roundNum, boardsPerRound){
+  const standings=calcSwissStandingsArray();
+  const history=getSwissPairingHistory(getMovements());
+  const matches=pairSwissMatches(standings,history);
+  const movements={};
+  const boardStart=(roundNum-1)*boardsPerRound+1;
+  const boardEnd=boardStart+boardsPerRound-1;
+  matches.forEach((pair,idx)=>{
+    const table=idx+1;
+    const[a,b]=pair;
+    // Alternate direction by round parity for rough NS/EW balance over the session.
+    const ns=roundNum%2===1?a:b;
+    const ew=roundNum%2===1?b:a;
+    movements[roundNum+'_'+table]={ns,ew,boardStart,boardEnd};
+  });
+  return movements;
+}
+
+// Auto-trigger: called from checkRoundComplete() whenever it detects the
+// current round is fully done. Idempotent — if the next round's pairing
+// already exists, it does nothing, so it's safe to call from multiple
+// clients/polling ticks without producing duplicate/conflicting pairings.
+let _swissGenerating=false;
+async function maybeAdvanceSwissRound(){
+  const s=getState();
+  if(s.movement!=='swiss'||s.status!=='running'||_swissGenerating)return;
+  const boards=getBoards();const movements=getMovements();
+  let total=0,done=0;
+  for(let t=1;t<=s.tableCount;t++){
+    const m=movements[s.currentRound+'_'+t]||{};
+    for(let b=m.boardStart||1;b<=(m.boardEnd||3);b++){
+      total++;
+      if(boards[t+'_'+s.currentRound+'_'+b]?.status==='done')done++;
+    }
+  }
+  const allDone=total>0&&done>=total;
+  const nextR=s.currentRound+1;
+  if(!allDone||nextR>s.roundCount)return;
+  if(movements[nextR+'_1'])return; // already generated by someone else
+  _swissGenerating=true;
+  try{
+    const nextMovements=generateSwissRoundMovements(nextR,s.boardsPerRound);
+    await setMovements({...movements,...nextMovements});
+    addLog('ok','Swiss pairing generated','Round '+nextR);
+  }catch(e){ console.error('Swiss pairing generation failed',e); }
+  _swissGenerating=false;
+}
+
+function getNextRoundInfo(tableNo,currentRound,state,movements,pairs){
+  const nextR=currentRound+1;
+  if(nextR>state.roundCount)return null;
+  const m=movements[nextR+'_'+tableNo];
+  if(!m)return null;
+  const ns=pairs[m.ns]||{name:m.ns||'—',isPhantom:false};
+  const ew=pairs[m.ew]||{name:m.ew||'—',isPhantom:false};
+  return{round:nextR,table:tableNo,ns,ew,boardStart:m.boardStart,boardEnd:m.boardEnd};
+}
+
+// ══════════════════════════════════════════════════════

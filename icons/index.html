@@ -1,0 +1,1616 @@
+<!DOCTYPE html>
+<html lang="tr" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>BridgeGate · Tournament System</title>
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0f0e0c">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>♠</text></svg>">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/10.13.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.13.1/firebase-database-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.13.1/firebase-auth-compat.js"></script>
+    
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=DM+Sans:wght@300;400;500;600;700&family=Share+Tech+Mono&display=swap');
+        
+        :root {
+            --bg: #0f0e0c;
+            --surface: #1a1916;
+            --surface2: #242220;
+            --surface3: #2e2b27;
+            --border: #2e2c29;
+            --border2: #3e3c38;
+            --text: #f0ece4;
+            --text2: #9a958c;
+            --text3: #5a5650;
+            --gold: #c9a84c;
+            --gold2: #e8c96a;
+            --golddim: rgba(201,168,76,0.12);
+            --red: #e05a4e;
+            --reddim: rgba(224,90,78,0.12);
+            --green: #4caf7d;
+            --greendim: rgba(76,175,125,0.12);
+            --blue: #5b9bd5;
+            --bluedim: rgba(91,155,213,0.12);
+            --purple: #a78bfa;
+            --purpledim: rgba(167,139,250,0.12);
+            --radius: 12px;
+            --radius-sm: 8px;
+            --shadow: 0 8px 32px rgba(0,0,0,0.6);
+        }
+        
+        [data-theme="light"] {
+            --bg: #f0ede6;
+            --surface: #fff;
+            --surface2: #e8e4db;
+            --surface3: #ddd9d0;
+            --border: #d0ccc3;
+            --border2: #c0bcb3;
+            --text: #1a1714;
+            --text2: #5a5650;
+            --text3: #8a8580;
+            --shadow: 0 8px 32px rgba(0,0,0,0.1);
+        }
+        
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: 'DM Sans', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            font-size: 14px;
+            -webkit-tap-highlight-color: transparent;
+        }
+        
+        #toast {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%) translateY(80px);
+            background: var(--surface3);
+            border: 1px solid var(--border2);
+            color: var(--text);
+            padding: 10px 22px;
+            border-radius: 30px;
+            font-size: 0.85rem;
+            z-index: 9999;
+            transition: transform 0.3s, opacity 0.3s;
+            opacity: 0;
+            pointer-events: none;
+            white-space: nowrap;
+            box-shadow: var(--shadow);
+        }
+        #toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
+        
+        /* LOGIN */
+        .login-screen {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            padding: 20px;
+            background: radial-gradient(ellipse at 50% 30%, #1e1b16, var(--bg));
+        }
+        [data-theme="light"] .login-screen {
+            background: radial-gradient(ellipse at 50% 30%, #e0dbd2, var(--bg));
+        }
+        .login-box {
+            max-width: 360px;
+            width: 100%;
+            padding: 36px 26px;
+            background: var(--surface);
+            border-radius: var(--radius);
+            border: 1px solid var(--border);
+            box-shadow: var(--shadow);
+            text-align: center;
+            position: relative;
+        }
+        .login-logo {
+            font-family: 'Playfair Display', serif;
+            font-size: 34px;
+            color: var(--gold);
+            letter-spacing: 1px;
+        }
+        .login-sub {
+            color: var(--text2);
+            font-size: 0.8rem;
+            padding-bottom: 14px;
+            margin-bottom: 16px;
+            border-bottom: 1px solid var(--border);
+        }
+        .role-tabs {
+            display: flex;
+            gap: 5px;
+            margin-bottom: 16px;
+        }
+        .role-tab {
+            flex: 1;
+            padding: 8px 0;
+            background: var(--surface2);
+            border: 1px solid transparent;
+            color: var(--text2);
+            cursor: pointer;
+            border-radius: 30px;
+            font-weight: 500;
+            font-size: 0.76rem;
+            transition: all 0.15s;
+            font-family: inherit;
+        }
+        .role-tab.active {
+            background: var(--gold);
+            color: #0f0e0c;
+            font-weight: 700;
+            border-color: var(--gold);
+        }
+        .pw-wrap { margin-bottom: 8px; }
+        .pw-wrap input {
+            width: 100%;
+            padding: 11px 16px;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            color: var(--text);
+            font-size: 0.95rem;
+            outline: none;
+            text-align: center;
+            letter-spacing: 3px;
+            font-family: inherit;
+        }
+        .pw-wrap input:focus { border-color: var(--gold); }
+        .login-err {
+            color: var(--red);
+            font-size: 0.76rem;
+            min-height: 16px;
+            margin-bottom: 6px;
+        }
+        .btn-primary {
+            width: 100%;
+            padding: 12px;
+            background: var(--gold);
+            border: none;
+            border-radius: 30px;
+            cursor: pointer;
+            font-weight: 700;
+            font-size: 0.92rem;
+            color: #0f0e0c;
+            box-shadow: 0 4px 0 #7a6a33;
+            font-family: inherit;
+            transition: all 0.1s;
+        }
+        .btn-primary:active {
+            transform: translateY(3px);
+            box-shadow: 0 1px 0 #7a6a33;
+        }
+        .theme-toggle-login {
+            position: absolute;
+            top: 12px;
+            right: 12px;
+            background: none;
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            padding: 4px 10px;
+            cursor: pointer;
+            font-size: 0.75rem;
+            color: var(--text2);
+            font-family: inherit;
+        }
+        
+        /* APP SHELL */
+        #app { display: none; flex: 1; flex-direction: column; }
+        
+        .topbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 9px 16px;
+            background: var(--surface);
+            border-bottom: 1px solid var(--border);
+            position: sticky;
+            top: 0;
+            z-index: 50;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        .topbar-left {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        .topbar-logo {
+            font-family: 'Playfair Display', serif;
+            font-size: 20px;
+            color: var(--gold);
+        }
+        .topbar-club {
+            font-size: 0.7rem;
+            font-weight: 600;
+            color: var(--gold);
+            padding: 2px 10px;
+            border-radius: 10px;
+            background: var(--golddim);
+            border: 1px solid rgba(201,168,76,0.25);
+            max-width: 120px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .topbar-badge {
+            font-size: 0.66rem;
+            padding: 2px 8px;
+            border-radius: 10px;
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            color: var(--text3);
+        }
+        .topbar-round {
+            font-size: 0.72rem;
+            color: var(--gold);
+            background: var(--golddim);
+            padding: 2px 9px;
+            border-radius: 10px;
+            border: 1px solid rgba(201,168,76,0.2);
+        }
+        .topbar-right {
+            display: flex;
+            gap: 4px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .tbtn {
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            color: var(--text2);
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 0.7rem;
+            cursor: pointer;
+            font-family: inherit;
+        }
+        .tbtn:active { background: var(--border); }
+        
+        #panelContent {
+            padding: 12px;
+            flex: 1;
+            max-width: 740px;
+            margin: 0 auto;
+            width: 100%;
+        }
+        
+        @keyframes fadeUp {
+            from { opacity: 0; transform: translateY(8px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .panel-anim { animation: fadeUp 0.22s ease; }
+        
+        /* CARDS */
+        .card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 14px;
+            margin-bottom: 10px;
+        }
+        .card-title {
+            font-size: 0.7rem;
+            font-weight: 600;
+            color: var(--text3);
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 7px;
+        }
+        
+        /* BUTTONS */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 5px;
+            padding: 8px 14px;
+            border-radius: 30px;
+            border: none;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 0.78rem;
+            transition: all 0.15s;
+            font-family: inherit;
+            min-height: 38px;
+        }
+        .btn:active { opacity: 0.75; transform: scale(0.97); }
+        .btn-gold { background: var(--gold); color: #0f0e0c; }
+        .btn-green { background: var(--green); color: #fff; }
+        .btn-red { background: var(--red); color: #fff; }
+        .btn-blue { background: var(--blue); color: #fff; }
+        .btn-purple { background: var(--purple); color: #fff; }
+        .btn-ghost { background: var(--surface2); color: var(--text2); border: 1px solid var(--border); }
+        .btn-sm { padding: 4px 10px; font-size: 0.7rem; min-height: 30px; }
+        .btn-full { width: 100%; }
+        
+        .field { margin-bottom: 10px; }
+        .field label {
+            display: block;
+            font-size: 0.7rem;
+            color: var(--text2);
+            margin-bottom: 3px;
+            font-weight: 500;
+        }
+        .field input, .field select {
+            width: 100%;
+            padding: 9px 12px;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            color: var(--text);
+            font-size: 0.9rem;
+            outline: none;
+            font-family: inherit;
+            -webkit-appearance: none;
+        }
+        .field input:focus, .field select:focus { border-color: var(--gold); }
+        .field select option { background: var(--surface); }
+        .field-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+        }
+        .field-row-3 {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 6px;
+        }
+        .field-row-4 {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr 1fr;
+            gap: 6px;
+        }
+        
+        /* MODAL */
+        .modal-bg {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.82);
+            z-index: 200;
+            align-items: center;
+            justify-content: center;
+            padding: 14px;
+            backdrop-filter: blur(3px);
+        }
+        .modal-bg.open { display: flex; }
+        .modal {
+            background: var(--surface);
+            border: 1px solid var(--border2);
+            border-radius: var(--radius);
+            padding: 18px 16px;
+            max-width: 480px;
+            width: 100%;
+            box-shadow: var(--shadow);
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+        .modal h3 {
+            color: var(--gold);
+            margin-bottom: 12px;
+            font-size: 0.95rem;
+        }
+        .modal-actions {
+            display: flex;
+            gap: 7px;
+            margin-top: 14px;
+        }
+        .modal-actions .btn { flex: 1; }
+        
+        /* DASHBOARD */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 8px;
+        }
+        .stat-card {
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            padding: 10px 8px;
+            text-align: center;
+        }
+        .stat-card .sv {
+            font-size: 1.3rem;
+            font-weight: 700;
+            color: var(--gold);
+            font-family: 'Share Tech Mono', monospace;
+        }
+        .stat-card .sl {
+            font-size: 0.6rem;
+            color: var(--text3);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .quick-actions {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+        .quick-actions .btn { flex: 1; min-width: 80px; font-size: 0.72rem; padding: 8px 10px; }
+        
+        .empty-state {
+            text-align: center;
+            padding: 30px 16px;
+            color: var(--text3);
+        }
+        .empty-icon { font-size: 32px; margin-bottom: 6px; }
+        
+        /* TABLE GRID */
+        .table-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+            gap: 8px;
+        }
+        .table-card {
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            padding: 12px 8px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+        .table-card:active { transform: scale(0.95); background: var(--border); }
+        .table-card .table-num {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--gold);
+            font-family: 'Playfair Display', serif;
+        }
+        .table-card .table-status {
+            font-size: 0.6rem;
+            color: var(--text3);
+            margin-top: 2px;
+        }
+        
+        /* TABLE ENTRY */
+        .table-entry {
+            max-width: 360px;
+            margin: 0 auto;
+            text-align: center;
+        }
+        .table-entry .big-input {
+            font-size: 2.5rem;
+            text-align: center;
+            padding: 16px;
+            width: 140px;
+            margin: 0 auto;
+            background: var(--surface2);
+            border: 2px solid var(--border2);
+            border-radius: var(--radius);
+            color: var(--text);
+            outline: none;
+            font-family: 'DM Sans', sans-serif;
+            display: block;
+        }
+        .table-entry .big-input:focus { border-color: var(--gold); }
+        
+        .table-entry .side-btns {
+            display: flex;
+            gap: 12px;
+            justify-content: center;
+            margin: 14px 0;
+        }
+        .table-entry .side-btn {
+            padding: 12px 28px;
+            border-radius: var(--radius);
+            border: 2px solid var(--border);
+            background: var(--surface2);
+            color: var(--text);
+            font-weight: 700;
+            font-size: 0.95rem;
+            cursor: pointer;
+            font-family: inherit;
+            min-width: 90px;
+            transition: all 0.15s;
+        }
+        .table-entry .side-btn:active { transform: scale(0.95); }
+        .table-entry .side-btn.ns { border-color: var(--blue); color: var(--blue); }
+        .table-entry .side-btn.ns.active { background: var(--bluedim); border-color: var(--blue); box-shadow: 0 0 20px rgba(91,155,213,0.2); }
+        .table-entry .side-btn.ew { border-color: var(--gold); color: var(--gold); }
+        .table-entry .side-btn.ew.active { background: var(--golddim); border-color: var(--gold); box-shadow: 0 0 20px rgba(201,168,76,0.2); }
+        
+        /* NAME ENTRY */
+        .name-entry {
+            max-width: 380px;
+            margin: 0 auto;
+        }
+        .name-entry .pair-box {
+            background: var(--surface2);
+            border-radius: var(--radius-sm);
+            padding: 12px;
+            margin-bottom: 10px;
+            border: 1px solid var(--border);
+        }
+        .name-entry .pair-box.ns { border-color: rgba(91,155,213,0.3); background: var(--bluedim); }
+        .name-entry .pair-box.ew { border-color: rgba(201,168,76,0.3); background: var(--golddim); }
+        .name-entry .pair-label {
+            font-size: 0.65rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 6px;
+        }
+        .name-entry .pair-box.ns .pair-label { color: var(--blue); }
+        .name-entry .pair-box.ew .pair-label { color: var(--gold); }
+        .name-entry .name-input {
+            width: 100%;
+            padding: 8px 10px;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: var(--text);
+            font-size: 0.88rem;
+            outline: none;
+            font-family: inherit;
+        }
+        .name-entry .name-input:focus { border-color: var(--gold); }
+        .name-entry .name-input + .name-input { margin-top: 6px; }
+        
+        /* SIDE BADGE ON TOPBAR */
+        .side-badge {
+            font-size: 0.6rem;
+            padding: 2px 10px;
+            border-radius: 12px;
+            font-weight: 700;
+        }
+        .side-badge.ns { background: var(--bluedim); color: var(--blue); border: 1px solid rgba(91,155,213,0.3); }
+        .side-badge.ew { background: var(--golddim); color: var(--gold); border: 1px solid rgba(201,168,76,0.3); }
+        
+        /* BOARD ENTRY BUTTONS */
+        .btn-grid {
+            display: grid;
+            gap: 6px;
+        }
+        .btn-grid-7 { grid-template-columns: repeat(7, 1fr); }
+        .btn-grid-5 { grid-template-columns: repeat(5, 1fr); }
+        .btn-grid-4 { grid-template-columns: repeat(4, 1fr); }
+        .btn-grid-3 { grid-template-columns: repeat(3, 1fr); }
+        
+        .btn-opt {
+            padding: 10px 4px;
+            background: var(--surface2);
+            border: 2px solid var(--border);
+            border-radius: 6px;
+            cursor: pointer;
+            text-align: center;
+            font-size: 0.9rem;
+            font-weight: 700;
+            transition: all 0.12s;
+            font-family: inherit;
+            color: var(--text);
+            min-height: 44px;
+        }
+        .btn-opt:active { transform: scale(0.95); }
+        .btn-opt.active { border-color: var(--gold); background: var(--golddim); }
+        .btn-opt.red { color: var(--red); }
+        .btn-opt.red.active { border-color: var(--red); background: var(--reddim); }
+        .btn-opt.blue { color: var(--blue); }
+        .btn-opt.blue.active { border-color: var(--blue); background: var(--bluedim); }
+        .btn-opt.green { color: var(--green); }
+        .btn-opt.green.active { border-color: var(--green); background: var(--greendim); }
+        .btn-opt.pass { border-color: var(--purple); color: var(--purple); }
+        .btn-opt.pass.active { border-color: var(--purple); background: var(--purpledim); }
+        .btn-opt.wide { grid-column: span 2; }
+        .btn-opt.wider { grid-column: span 3; }
+        
+        /* LEADERBOARD */
+        .lb-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+        .lb-table th {
+            text-align: left;
+            padding: 6px 8px;
+            font-size: 0.6rem;
+            text-transform: uppercase;
+            color: var(--text3);
+            border-bottom: 2px solid var(--border);
+        }
+        .lb-table td {
+            padding: 6px 8px;
+            border-bottom: 1px solid var(--border);
+        }
+        .lb-table .rank-1 { color: var(--gold); font-weight: 700; }
+        .lb-table .rank-2 { color: #9aa3b2; font-weight: 700; }
+        .lb-table .rank-3 { color: #c17c3e; font-weight: 700; }
+        .lb-table .positive { color: var(--green); }
+        .lb-table .negative { color: var(--red); }
+        
+        .super-link {
+            font-size: 0.7rem;
+            color: var(--text3);
+            text-decoration: none;
+            display: inline-block;
+            margin-top: 10px;
+        }
+        
+        /* RESPONSIVE */
+        @media (max-width: 480px) {
+            .stats-grid { grid-template-columns: repeat(2, 1fr); }
+            .field-row { grid-template-columns: 1fr; }
+            .field-row-3 { grid-template-columns: 1fr 1fr 1fr; }
+            .field-row-4 { grid-template-columns: 1fr 1fr; }
+            .table-grid { grid-template-columns: repeat(auto-fill, minmax(70px, 1fr)); }
+            .topbar-logo { font-size: 17px; }
+            .topbar-club { max-width: 80px; font-size: 0.6rem; }
+            .quick-actions .btn { min-width: 60px; font-size: 0.65rem; padding: 6px 8px; }
+            #panelContent { padding: 8px; }
+            .card { padding: 10px; }
+            .btn { font-size: 0.7rem; padding: 6px 12px; min-height: 34px; }
+            .table-entry .big-input { font-size: 2rem; width: 120px; padding: 12px; }
+            .table-entry .side-btn { padding: 10px 16px; min-width: 70px; font-size: 0.8rem; }
+            .btn-opt { font-size: 0.75rem; padding: 8px 2px; min-height: 36px; }
+            .btn-grid-7 { grid-template-columns: repeat(4, 1fr); }
+        }
+        
+        @media (max-width: 380px) {
+            .stats-grid { grid-template-columns: 1fr 1fr; gap: 4px; }
+            .stat-card .sv { font-size: 1rem; }
+            .table-grid { grid-template-columns: repeat(auto-fill, minmax(60px, 1fr)); gap: 4px; }
+            .topbar { padding: 6px 10px; }
+            .field-row-4 { grid-template-columns: 1fr 1fr; }
+        }
+    </style>
+</head>
+<body>
+
+<div id="toast"></div>
+
+<!-- MODAL -->
+<div class="modal-bg" id="modalBg" onclick="if(event.target===this)closeModal()">
+    <div class="modal" id="modalBox">
+        <h3 id="modalTitle"></h3>
+        <div id="modalBody"></div>
+        <div class="modal-actions" id="modalActions"></div>
+    </div>
+</div>
+
+<!-- LOGIN EKRANI -->
+<div class="login-screen" id="loginScreen">
+    <div class="login-box">
+        <button class="theme-toggle-login" onclick="toggleTheme()">🌓</button>
+        <div class="login-logo">♠ BridgeGate</div>
+        <div class="login-sub" id="loginSub">Loading...</div>
+
+        <div class="role-tabs">
+            <button class="role-tab active" onclick="selectRole('admin')">⚙️ Admin</button>
+            <button class="role-tab" onclick="selectRole('table')">🃏 Table</button>
+            <button class="role-tab" onclick="selectRole('screen')">📺 Screen</button>
+        </div>
+
+        <div class="pw-wrap">
+            <input type="password" id="passwordInput" placeholder="Password" 
+                   onkeydown="if(event.key==='Enter')doLogin()">
+        </div>
+        <div class="login-err" id="loginError"></div>
+        <button class="btn-primary" onclick="doLogin()">Login</button>
+        
+        <div>
+            <a href="#" class="super-link" onclick="event.preventDefault();showSuperAdminLogin();">🛡️ Super Admin</a>
+        </div>
+    </div>
+</div>
+
+<!-- ANA UYGULAMA -->
+<div id="app">
+    <div class="topbar">
+        <div class="topbar-left">
+            <div class="topbar-logo">♠ BridgeGate</div>
+            <span class="topbar-club" id="topbarClub"></span>
+            <span class="topbar-badge" id="topbarRole"></span>
+            <span class="side-badge ns" id="topbarSide" style="display:none;">🔵 NS</span>
+        </div>
+        <div class="topbar-right">
+            <button class="tbtn" onclick="toggleTheme()">🌓</button>
+            <button class="tbtn" onclick="doLogout()">Logout</button>
+        </div>
+    </div>
+    <div id="panelContent"></div>
+</div>
+
+<script>
+// ============================================
+// FIREBASE
+// ============================================
+
+const firebaseConfig = {
+    apiKey: "AIzaSyD1TA78WcqWNDLkbhe6We9LM_AkmQs04EM",
+    authDomain: "bridgegate-1a2c6.firebaseapp.com",
+    databaseURL: "https://bridgegate-1a2c6-default-rtdb.europe-west1.firebasedatabase.app",
+    projectId: "bridgegate-1a2c6",
+    storageBucket: "bridgegate-1a2c6.firebasestorage.app",
+    messagingSenderId: "544390125037",
+    appId: "1:544390125037:web:b7f539c56d2aaea6f943e4"
+};
+
+firebase.initializeApp(firebaseConfig);
+const database = firebase.database();
+const auth = firebase.auth();
+
+auth.signInAnonymously().catch(e => console.log('Auth:', e));
+
+// ============================================
+// KULÜP YÖNETİMİ
+// ============================================
+
+let CLUB_ID = localStorage.getItem('selectedClub') || 'alanya';
+let CLUB_NAME = '';
+
+function getClubPath(path) { return `clubs/${CLUB_ID}/bm/${path}`; }
+
+function writeClubData(path, data) { return database.ref(getClubPath(path)).set(data); }
+
+function readClubData(path, cb) {
+    database.ref(getClubPath(path)).on('value', s => cb(s.val()));
+}
+
+function readClubDataOnce(path) {
+    return database.ref(getClubPath(path)).once('value').then(s => s.val());
+}
+
+function loadClubInfo() {
+    database.ref(`clubs/${CLUB_ID}/info/name`).once('value').then(s => {
+        CLUB_NAME = s.val() || CLUB_ID;
+        document.getElementById('loginSub').textContent = CLUB_NAME;
+        document.getElementById('topbarClub').textContent = '🏛️ ' + CLUB_NAME;
+    }).catch(() => {
+        document.getElementById('loginSub').textContent = 'Club: ' + CLUB_ID;
+    });
+}
+loadClubInfo();
+
+// ============================================
+// MODAL
+// ============================================
+
+function openModal(title, body, actions) {
+    document.getElementById('modalTitle').textContent = title;
+    document.getElementById('modalBody').innerHTML = body;
+    document.getElementById('modalActions').innerHTML = actions || '';
+    document.getElementById('modalBg').classList.add('open');
+}
+function closeModal() { document.getElementById('modalBg').classList.remove('open'); }
+
+// ============================================
+// SUPER ADMIN
+// ============================================
+
+function showSuperAdminLogin() {
+    openModal('🛡️ Super Admin', `
+        <div class="field">
+            <label>Super Admin Password</label>
+            <input type="password" id="saPassword" placeholder="Enter password" 
+                   onkeydown="if(event.key==='Enter')superAdminLogin()">
+        </div>
+        <div class="login-err" id="saError"></div>
+    `, `
+        <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+        <button class="btn btn-gold" onclick="superAdminLogin()">Login</button>
+    `);
+    setTimeout(() => document.getElementById('saPassword')?.focus(), 100);
+}
+
+function superAdminLogin() {
+    const pw = document.getElementById('saPassword').value;
+    const err = document.getElementById('saError');
+    database.ref('superadmin/password').once('value').then(s => {
+        if (pw === s.val()) { closeModal(); enterSuperAdmin(); }
+        else err.textContent = '❌ Wrong password';
+    }).catch(() => {
+        if (pw === '172663') { closeModal(); enterSuperAdmin(); }
+        else err.textContent = '❌ Wrong password';
+    });
+}
+
+function enterSuperAdmin() {
+    document.getElementById('loginScreen').style.display = 'none';
+    document.getElementById('app').style.display = 'flex';
+    document.getElementById('topbarRole').textContent = '🛡️ Super Admin';
+    renderSuperAdmin();
+}
+
+function renderSuperAdmin() {
+    const c = document.getElementById('panelContent');
+    c.innerHTML = `
+        <div class="card">
+            <div class="card-title">🛡️ Super Admin</div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;">
+                <button class="btn btn-green" onclick="openCreateClub()">➕ New Club</button>
+                <button class="btn btn-blue" onclick="listClubs()">📋 List Clubs</button>
+                <button class="btn btn-red" onclick="doLogout()">🚪 Logout</button>
+            </div>
+            <div id="clubList"></div>
+        </div>
+    `;
+    listClubs();
+}
+
+function openCreateClub() {
+    openModal('➕ New Club', `
+        <div class="field"><label>Club ID</label><input type="text" id="newClubId" placeholder="e.g. istanbul"></div>
+        <div class="field"><label>Club Name</label><input type="text" id="newClubName" placeholder="e.g. Istanbul Bridge Club"></div>
+        <div class="field-row">
+            <div class="field"><label>Admin Password</label><input type="text" id="newAdminPw" value="2370"></div>
+            <div class="field"><label>Table Password</label><input type="text" id="newTablePw" value="1234"></div>
+        </div>
+        <div class="login-err" id="newErr"></div>
+    `, `
+        <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+        <button class="btn btn-green" onclick="createClub()">Create</button>
+    `);
+    setTimeout(() => document.getElementById('newClubId')?.focus(), 100);
+}
+
+function createClub() {
+    const id = document.getElementById('newClubId').value.trim().toLowerCase().replace(/[^a-z0-9-]/g, '');
+    const name = document.getElementById('newClubName').value.trim();
+    const err = document.getElementById('newErr');
+    if (!id) { err.textContent = '❌ Enter Club ID'; return; }
+    if (!name) { err.textContent = '❌ Enter Club Name'; return; }
+    
+    const data = {
+        info: { name, created: new Date().toISOString(), active: true },
+        passwords: { admin: document.getElementById('newAdminPw').value || '2370', table: document.getElementById('newTablePw').value || '1234' },
+        bm: {
+            state: { name: name + ' Tournament', status: 'setup', currentRound: 0, roundCount: 0, tableCount: 4, boardsPerRound: 3, totalBoards: 12, scoring: 'MP', movement: 'mitchell', phantom: false, createdAt: new Date().toISOString() },
+            pairs: {}, boards: {}, movements: {}, approvals: {}, tableLocks: {}, logs: [], playerdb: []
+        }
+    };
+    database.ref('clubs/' + id).set(data).then(() => {
+        closeModal();
+        toast('✅ Club created!');
+        listClubs();
+    }).catch(e => { err.textContent = '❌ ' + e.message; });
+}
+
+function listClubs() {
+    database.ref('clubs').once('value').then(s => {
+        const data = s.val();
+        const container = document.getElementById('clubList');
+        if (!data) { container.innerHTML = '<div class="empty-state">No clubs</div>'; return; }
+        const clubs = Object.keys(data).filter(k => k !== 'description');
+        let html = '';
+        clubs.forEach(id => {
+            const info = data[id]?.info || {};
+            const active = CLUB_ID === id;
+            html += `
+                <div class="card" style="margin-bottom:6px; ${active ? 'border-color:var(--gold);' : ''}">
+                    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:4px;">
+                        <span><strong>${info.name || id}</strong> <span style="font-size:0.65rem;color:var(--text3);">${id}</span> ${active ? '✅' : ''}</span>
+                        <div style="display:flex;gap:4px;">
+                            <button class="btn btn-gold btn-sm" onclick="switchClub('${id}')">Switch</button>
+                            <button class="btn btn-blue btn-sm" onclick="openClub('${id}')">Open</button>
+                            <button class="btn btn-red btn-sm" onclick="deleteClub('${id}')">🗑️</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
+        container.innerHTML = html;
+    });
+}
+
+function switchClub(id) {
+    localStorage.setItem('selectedClub', id);
+    CLUB_ID = id;
+    loadClubInfo();
+    toast('🏛️ Switched to: ' + id);
+    listClubs();
+}
+
+function openClub(id) {
+    localStorage.setItem('selectedClub', id);
+    CLUB_ID = id;
+    loadClubInfo();
+    document.getElementById('loginScreen').style.display = 'flex';
+    document.getElementById('app').style.display = 'none';
+    document.getElementById('passwordInput').value = '';
+    document.getElementById('loginError').textContent = '';
+    toast('🏛️ Opening: ' + id);
+}
+
+function deleteClub(id) {
+    if (!confirm('Delete "' + id + '" permanently?')) return;
+    database.ref('clubs/' + id).remove().then(() => {
+        toast('🗑️ Deleted');
+        if (CLUB_ID === id) { localStorage.setItem('selectedClub', 'alanya'); CLUB_ID = 'alanya'; loadClubInfo(); }
+        listClubs();
+    });
+}
+
+// ============================================
+// LOGIN
+// ============================================
+
+let currentRole = 'admin';
+
+function selectRole(r) {
+    currentRole = r;
+    document.querySelectorAll('.role-tab').forEach(b => b.classList.remove('active'));
+    const idx = r === 'admin' ? 0 : r === 'table' ? 1 : 2;
+    document.querySelectorAll('.role-tab')[idx].classList.add('active');
+    document.getElementById('loginError').textContent = '';
+    document.getElementById('passwordInput').value = '';
+}
+
+function doLogin() {
+    const pw = document.getElementById('passwordInput').value;
+    const err = document.getElementById('loginError');
+    if (currentRole === 'screen') { loginSuccess(); return; }
+    CLUB_ID = localStorage.getItem('selectedClub') || 'alanya';
+    database.ref(`clubs/${CLUB_ID}/passwords/${currentRole}`).once('value').then(s => {
+        if (pw === s.val()) loginSuccess();
+        else err.textContent = '❌ Wrong password';
+    }).catch(() => {
+        const d = currentRole === 'admin' ? '2370' : '1234';
+        if (pw === d) loginSuccess();
+        else err.textContent = '❌ Wrong password';
+    });
+}
+
+function loginSuccess() {
+    document.getElementById('loginScreen').style.display = 'none';
+    document.getElementById('app').style.display = 'flex';
+    document.getElementById('topbarRole').textContent = currentRole.charAt(0).toUpperCase() + currentRole.slice(1);
+    loadClubInfo();
+    if (currentRole === 'admin') renderAdmin();
+    else if (currentRole === 'table') renderTableEntry();
+    else renderScreen();
+}
+
+function doLogout() {
+    document.getElementById('app').style.display = 'none';
+    document.getElementById('loginScreen').style.display = 'flex';
+    document.getElementById('passwordInput').value = '';
+    document.getElementById('loginError').textContent = '';
+    loadClubInfo();
+    document.getElementById('topbarSide').style.display = 'none';
+}
+
+function toast(msg) {
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    el.classList.add('show');
+    clearTimeout(el._t);
+    el._t = setTimeout(() => el.classList.remove('show'), 3000);
+}
+
+// ============================================
+// TEMA
+// ============================================
+
+function toggleTheme() {
+    const h = document.documentElement;
+    const n = h.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+    h.setAttribute('data-theme', n);
+    localStorage.setItem('theme', n);
+}
+(function() {
+    const t = localStorage.getItem('theme') || 'dark';
+    document.documentElement.setAttribute('data-theme', t);
+})();
+
+// ============================================
+// ADMIN
+// ============================================
+
+function renderAdmin() {
+    const c = document.getElementById('panelContent');
+    c.innerHTML = `
+        <div class="card">
+            <div class="card-title">🎯 Dashboard</div>
+            <div class="stats-grid">
+                <div class="stat-card"><div class="sv" id="sRounds">0</div><div class="sl">Rounds</div></div>
+                <div class="stat-card"><div class="sv" id="sTables">0</div><div class="sl">Tables</div></div>
+                <div class="stat-card"><div class="sv" id="sBoards">0</div><div class="sl">Boards</div></div>
+                <div class="stat-card"><div class="sv" id="sPairs">0</div><div class="sl">Pairs</div></div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-title">⚙️ Setup</div>
+            <div class="field"><label>Tournament Name</label><input type="text" id="tName" value="My Tournament"></div>
+            <div class="field-row">
+                <div class="field"><label>Tables</label><input type="number" id="tTables" value="4" min="2" max="20"></div>
+                <div class="field"><label>Boards/Round</label><input type="number" id="tBPR" value="3" min="1" max="8"></div>
+            </div>
+            <div class="field"><label>Scoring</label>
+                <select id="tScoring"><option value="MP">MP</option><option value="IMP">IMP</option></select>
+            </div>
+            <div class="field"><label>Movement</label>
+                <select id="tMovement">
+                    <option value="mitchell">Mitchell</option>
+                    <option value="howell">Howell</option>
+                    <option value="roundrobin">Round Robin</option>
+                </select>
+            </div>
+            <button class="btn btn-gold btn-full" onclick="createTournament()">🚀 Create</button>
+        </div>
+
+        <div class="card">
+            <div class="card-title">🃏 Tables <button class="btn btn-blue btn-sm" onclick="renderAdmin()">🔄</button></div>
+            <div id="tableList"><div class="empty-state">Create tournament first</div></div>
+        </div>
+
+        <div class="card">
+            <div class="card-title">📊 Leaderboard <button class="btn btn-purple btn-sm" onclick="showLeaderboard()">Show</button></div>
+            <div id="lbContainer"><div class="empty-state">No scores</div></div>
+        </div>
+
+        <div class="card">
+            <div class="card-title">📋 Actions</div>
+            <div class="quick-actions">
+                <button class="btn btn-green" onclick="startRound()">▶ Start</button>
+                <button class="btn btn-blue" onclick="exportReport()">📄 Export</button>
+                <button class="btn btn-purple" onclick="announce()">📢 Announce</button>
+            </div>
+        </div>
+    `;
+    readClubData('state', d => {
+        if (d) {
+            document.getElementById('sRounds').textContent = d.currentRound || 0;
+            document.getElementById('sTables').textContent = d.tableCount || 0;
+            document.getElementById('sBoards').textContent = d.totalBoards || 0;
+            document.getElementById('sPairs').textContent = (d.tableCount || 0) * 2;
+            document.getElementById('tName').value = d.name || 'My Tournament';
+            renderTables(d);
+        }
+    });
+}
+
+function renderTables(state) {
+    const c = document.getElementById('tableList');
+    if (!state || !state.tableCount) { c.innerHTML = '<div class="empty-state">Create tournament first</div>'; return; }
+    let html = '<div class="table-grid">';
+    for (let i = 1; i <= state.tableCount; i++) {
+        html += `<div class="table-card" onclick="openBoardEntryAdmin(${i})"><div class="table-num">${i}</div><div class="table-status">Tap</div></div>`;
+    }
+    html += '</div>';
+    c.innerHTML = html;
+}
+
+function openBoardEntryAdmin(table) {
+    openModal(`Table ${table} - Board`, `
+        <div class="field"><label>Board</label><input type="number" id="boardNumA" value="1"></div>
+        <div class="field"><label>Contract</label><input type="text" id="contractInpA" placeholder="4♠ N"></div>
+        <div class="field"><label>NS Score</label><input type="number" id="nsScoreInpA" value="0"></div>
+        <div class="login-err" id="boardErrA"></div>
+    `, `
+        <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+        <button class="btn btn-green" onclick="submitBoardAdmin(${table})">✅ Submit</button>
+    `);
+    setTimeout(() => document.getElementById('boardNumA')?.focus(), 100);
+}
+
+function submitBoardAdmin(table) {
+    const board = document.getElementById('boardNumA').value;
+    const contract = document.getElementById('contractInpA').value || 'PASS';
+    const ns = parseInt(document.getElementById('nsScoreInpA').value) || 0;
+    const err = document.getElementById('boardErrA');
+    if (!board) { err.textContent = '❌ Enter board'; return; }
+    const key = table + '_1_' + board;
+    readClubDataOnce('boards').then(boards => {
+        boards = boards || {};
+        boards[key] = { contract, nsScore: ns, ewScore: -ns, status: 'done', time: new Date().toISOString() };
+        return writeClubData('boards', boards);
+    }).then(() => { closeModal(); toast('✅ Board saved!'); renderAdmin(); })
+      .catch(e => { err.textContent = '❌ ' + e.message; });
+}
+
+function showLeaderboard() {
+    const c = document.getElementById('lbContainer');
+    readClubDataOnce('boards').then(boards => {
+        if (!boards || Object.keys(boards).length === 0) {
+            c.innerHTML = '<div class="empty-state">No scores</div>';
+            return;
+        }
+        const scores = {};
+        Object.entries(boards).forEach(([k, b]) => {
+            if (b.status === 'done' && typeof b.nsScore === 'number') {
+                const [t] = k.split('_');
+                if (!scores[t]) scores[t] = { total: 0, count: 0 };
+                scores[t].total += b.nsScore;
+                scores[t].count++;
+            }
+        });
+        const sorted = Object.entries(scores).sort((a, b) => (b[1].total / b[1].count) - (a[1].total / a[1].count));
+        let html = `<table class="lb-table"><thead><tr><th>#</th><th>Table</th><th>Avg</th><th>Boards</th></tr></thead><tbody>`;
+        sorted.forEach(([t, d], i) => {
+            const avg = (d.total / d.count).toFixed(1);
+            const cls = i === 0 ? 'rank-1' : i === 1 ? 'rank-2' : i === 2 ? 'rank-3' : '';
+            const sign = parseFloat(avg) > 0 ? 'positive' : parseFloat(avg) < 0 ? 'negative' : '';
+            html += `<tr><td class="${cls}">${i+1}</td><td>Table ${t}</td><td class="${sign}">${avg}</td><td>${d.count}</td></tr>`;
+        });
+        html += '</tbody></table>';
+        c.innerHTML = html;
+    });
+}
+
+function createTournament() {
+    const name = document.getElementById('tName').value || 'My Tournament';
+    const tables = parseInt(document.getElementById('tTables').value) || 4;
+    const bpr = parseInt(document.getElementById('tBPR').value) || 3;
+    const scoring = document.getElementById('tScoring').value;
+    const movement = document.getElementById('tMovement').value;
+    let rounds = movement === 'mitchell' ? tables : movement === 'howell' ? (tables * 2) - 1 : tables - 1;
+    const data = {
+        name, status: 'setup', currentRound: 0, roundCount: rounds,
+        tableCount: tables, boardsPerRound: bpr, totalBoards: tables * bpr,
+        scoring, movement, phantom: false,
+        createdAt: new Date().toISOString(), _setupPlayers: tables * 4
+    };
+    writeClubData('state', data).then(() => {
+        toast('✅ Tournament created!');
+        renderAdmin();
+    }).catch(e => toast('❌ ' + e.message));
+}
+
+// ============================================
+// TABLE - AYRI NS / EW SEÇİMİ
+// ============================================
+
+let tableSide = 'ns';
+let tableNumber = null;
+let boardForm = { level: null, suit: null, declarer: null, result: 0, doubled: '' };
+
+function renderTableEntry() {
+    const c = document.getElementById('panelContent');
+    readClubData('state', state => {
+        if (!state || !state.tableCount) {
+            c.innerHTML = `<div class="empty-state"><div class="empty-icon">⏳</div>Tournament not started</div>`;
+            return;
+        }
+        c.innerHTML = `
+            <div class="table-entry">
+                <div class="card">
+                    <div class="card-title">🃏 Table Selection</div>
+                    <div style="font-size:0.8rem;color:var(--text2);margin-bottom:12px;">${CLUB_NAME} · Round ${state.currentRound || 0}</div>
+                    
+                    <div style="display:flex;flex-direction:column;align-items:center;gap:14px;">
+                        <input type="number" id="tableInput" min="1" max="${state.tableCount}" 
+                               placeholder="Table #" 
+                               style="font-size:2.5rem;text-align:center;padding:16px;width:140px;
+                                      background:var(--surface2);border:2px solid var(--border2);
+                                      border-radius:var(--radius);color:var(--text);outline:none;
+                                      font-family:'DM Sans',sans-serif;display:block;">
+                        
+                        <div class="side-btns">
+                            <button class="side-btn ns active" id="sideNs" onclick="setSide('ns')">🔵 NS</button>
+                            <button class="side-btn ew" id="sideEw" onclick="setSide('ew')">🟡 EW</button>
+                        </div>
+                        
+                        <button class="btn btn-gold" style="min-width:180px;padding:14px 24px;font-size:1rem;" 
+                                onclick="enterTable()">
+                            SELECT → 
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+        setTimeout(() => document.getElementById('tableInput')?.focus(), 100);
+    });
+}
+
+function setSide(side) {
+    tableSide = side;
+    document.getElementById('sideNs').classList.toggle('active', side === 'ns');
+    document.getElementById('sideEw').classList.toggle('active', side === 'ew');
+}
+
+function enterTable() {
+    const input = document.getElementById('tableInput');
+    const num = parseInt(input?.value);
+    const state = getStateFromCache();
+    if (!num || num < 1 || num > state?.tableCount) {
+        toast('❌ Enter valid table number');
+        return;
+    }
+    tableNumber = num;
+    
+    const sideEl = document.getElementById('topbarSide');
+    sideEl.style.display = 'inline-flex';
+    sideEl.textContent = tableSide === 'ns' ? '🔵 NS' : '🟡 EW';
+    sideEl.className = 'side-badge ' + tableSide;
+    
+    renderNameEntry(num);
+}
+
+let _stateCache = null;
+readClubData('state', s => { _stateCache = s; });
+
+function getStateFromCache() { return _stateCache; }
+
+// ============================================
+// NAME ENTRY
+// ============================================
+
+function renderNameEntry(table) {
+    const c = document.getElementById('panelContent');
+    const state = getStateFromCache();
+    
+    readClubDataOnce('movements').then(mov => {
+        const mk = (state?.currentRound || 1) + '_' + table;
+        const m = mov?.[mk] || {};
+        
+        readClubDataOnce('pairs').then(pairs => {
+            pairs = pairs || {};
+            const ns = pairs?.[m.ns] || { name: '' };
+            const ew = pairs?.[m.ew] || { name: '' };
+            const [ns1, ns2] = splitName(ns.name || '');
+            const [ew1, ew2] = splitName(ew.name || '');
+            
+            c.innerHTML = `
+                <div class="name-entry">
+                    <div class="card" style="border-color:var(--gold);">
+                        <div class="card-title">
+                            <span>👤 Table ${table} · Round ${state?.currentRound || 1}</span>
+                            <span class="side-badge ${tableSide}">${tableSide === 'ns' ? '🔵 NS' : '🟡 EW'}</span>
+                        </div>
+                        
+                        <div class="pair-box ns">
+                            <div class="pair-label">🔵 North-South</div>
+                            <input class="name-input" id="ns1" value="${ns1}" placeholder="Player 1 — Full Name">
+                            <input class="name-input" id="ns2" value="${ns2}" placeholder="Player 2 — Full Name">
+                        </div>
+                        
+                        <div class="pair-box ew">
+                            <div class="pair-label">🟡 East-West</div>
+                            <input class="name-input" id="ew1" value="${ew1}" placeholder="Player 1 — Full Name">
+                            <input class="name-input" id="ew2" value="${ew2}" placeholder="Player 2 — Full Name">
+                        </div>
+                        
+                        <div style="background:var(--surface2);border-radius:8px;padding:10px;text-align:center;margin-bottom:12px;">
+                            <div style="font-size:0.65rem;color:var(--text3);text-transform:uppercase;letter-spacing:1px;">Boards</div>
+                            <div style="font-size:1.2rem;font-weight:700;color:var(--gold);">B${m.boardStart || '?'} – B${m.boardEnd || '?'}</div>
+                        </div>
+                        
+                        <button class="btn btn-green btn-full" onclick="confirmNames(${table}, '${m.ns || ''}', '${m.ew || ''}')">
+                            ✅ Confirm — Start Playing
+                        </button>
+                        <button class="btn btn-ghost btn-full" style="margin-top:6px;" onclick="renderTableEntry()">← Back</button>
+                    </div>
+                </div>
+            `;
+        });
+    });
+}
+
+function splitName(name) {
+    if (!name) return ['', ''];
+    if (/^(NS|EW|Pair)\s*\d+$/.test(name.trim())) return ['', ''];
+    const parts = name.split(' & ');
+    return [parts[0] || '', parts[1] || ''];
+}
+
+function joinName(a, b) {
+    const p1 = (a || '').trim();
+    const p2 = (b || '').trim();
+    if (p1 && p2) return p1 + ' & ' + p2;
+    return p1 || p2 || '';
+}
+
+function confirmNames(table, nsId, ewId) {
+    const ns1 = document.getElementById('ns1')?.value || '';
+    const ns2 = document.getElementById('ns2')?.value || '';
+    const ew1 = document.getElementById('ew1')?.value || '';
+    const ew2 = document.getElementById('ew2')?.value || '';
+    
+    readClubDataOnce('pairs').then(pairs => {
+        pairs = pairs || {};
+        if (nsId && pairs[nsId]) {
+            pairs[nsId].name = joinName(ns1, ns2);
+        }
+        if (ewId && pairs[ewId]) {
+            pairs[ewId].name = joinName(ew1, ew2);
+        }
+        return writeClubData('pairs', pairs);
+    }).then(() => {
+        toast('✅ Names saved!');
+        renderBoardEntry(table);
+    }).catch(e => toast('❌ ' + e.message));
+}
+
+// ============================================
+// BOARD ENTRY - FULL CONTRACT
+// ============================================
+
+function renderBoardEntry(table) {
+    const c = document.getElementById('panelContent');
+    const state = getStateFromCache();
+    const round = state?.currentRound || 1;
+    
+    boardForm = { level: null, suit: null, declarer: null, result: 0, doubled: '' };
+    
+    c.innerHTML = `
+        <div class="card">
+            <div class="card-title">
+                <span>🃏 Table ${table} · Round ${round}</span>
+                <span class="side-badge ${tableSide}">${tableSide === 'ns' ? '🔵 NS' : '🟡 EW'}</span>
+            </div>
+            
+            <!-- Level -->
+            <div style="margin-bottom:8px;">
+                <div style="font-size:0.65rem;color:var(--text3);margin-bottom:4px;font-weight:600;letter-spacing:0.5px;">Level</div>
+                <div class="btn-grid btn-grid-7">
+                    ${[1,2,3,4,5,6,7].map(l => `
+                        <button class="btn-opt" id="lvl${l}" onclick="setLevel(${l})">${l}</button>
+                    `).join('')}
+                    <button class="btn-opt pass" id="lvlP" onclick="setPass()">PASS</button>
+                    <button class="btn-opt red" id="lvlX" onclick="setDoubled('X')">X</button>
+                    <button class="btn-opt red" id="lvlXX" onclick="setDoubled('XX')">XX</button>
+                </div>
+            </div>
+            
+            <!-- Suit -->
+            <div style="margin-bottom:8px;">
+                <div style="font-size:0.65rem;color:var(--text3);margin-bottom:4px;font-weight:600;letter-spacing:0.5px;">Suit</div>
+                <div class="btn-grid btn-grid-5">
+                    ${['♣','♦','♥','♠','NT'].map(s => `
+                        <button class="btn-opt ${s === '♦' || s === '♥' ? 'red' : ''}" id="suit${s}" onclick="setSuit('${s}')">${s}</button>
+                    `).join('')}
+                </div>
+            </div>
+            
+            <!-- Declarer -->
+            <div style="margin-bottom:8px;">
+                <div style="font-size:0.65rem;color:var(--text3);margin-bottom:4px;font-weight:600;letter-spacing:0.5px;">Declarer</div>
+                <div class="btn-grid btn-grid-4">
+                    ${['N','S','E','W'].map(d => `
+                        <button class="btn-opt ${d === 'N' || d === 'S' ? 'blue' : 'green'}" id="dec${d}" onclick="setDeclarer('${d}')">${d}</button>
+                    `).join('')}
+                </div>
+            </div>
+            
+            <!-- Result -->
+            <div style="margin-bottom:12px;">
+                <div style="font-size:0.65rem;color:var(--text3);margin-bottom:4px;font-weight:600;letter-spacing:0.5px;">Result (NS Score)</div>
+                <div style="display:flex;align-items:center;gap:12px;justify-content:center;">
+                    <button class="btn btn-ghost" style="min-width:50px;font-size:1.2rem;" onclick="adjustResult(-1)">−</button>
+                    <span id="resultDisplay" style="font-size:1.8rem;font-weight:700;color:var(--gold);min-width:60px;text-align:center;font-family:'Share Tech Mono',monospace;">= 0</span>
+                    <button class="btn btn-ghost" style="min-width:50px;font-size:1.2rem;" onclick="adjustResult(1)">+</button>
+                </div>
+                <div id="resultLabel" style="text-align:center;font-size:0.7rem;color:var(--text3);margin-top:4px;"></div>
+            </div>
+            
+            <!-- Contract Preview -->
+            <div style="background:var(--surface2);border-radius:var(--radius-sm);padding:10px;text-align:center;margin-bottom:12px;">
+                <div style="font-size:0.6rem;color:var(--text3);text-transform:uppercase;letter-spacing:1px;">Contract</div>
+                <div id="contractPreview" style="font-size:1.3rem;font-weight:700;color:var(--gold);font-family:'Share Tech Mono',monospace;">—</div>
+            </div>
+            
+            <div class="login-err" id="boardErrT"></div>
+            
+            <button class="btn btn-green btn-full" onclick="submitBoardFull(${table})">✅ Submit Score</button>
+            <button class="btn btn-ghost btn-full" style="margin-top:6px;" onclick="renderTableEntry()">← Back</button>
+        </div>
+    `;
+}
+
+function setLevel(l) {
+    boardForm.level = l;
+    boardForm.isPass = false;
+    document.querySelectorAll('[id^="lvl"]').forEach(b => b.classList.remove('active'));
+    document.getElementById('lvl' + l)?.classList.add('active');
+    updateContractPreview();
+}
+
+function setPass() {
+    boardForm.isPass = true;
+    boardForm.level = null;
+    document.querySelectorAll('[id^="lvl"]').forEach(b => b.classList.remove('active'));
+    document.getElementById('lvlP')?.classList.add('active');
+    updateContractPreview();
+}
+
+function setSuit(s) {
+    boardForm.suit = s;
+    document.querySelectorAll('[id^="suit"]').forEach(b => b.classList.remove('active'));
+    document.getElementById('suit' + s)?.classList.add('active');
+    updateContractPreview();
+}
+
+function setDeclarer(d) {
+    boardForm.declarer = d;
+    document.querySelectorAll('[id^="dec"]').forEach(b => b.classList.remove('active'));
+    document.getElementById('dec' + d)?.classList.add('active');
+    updateContractPreview();
+}
+
+function setDoubled(d) {
+    boardForm.doubled = boardForm.doubled === d ? '' : d;
+    document.querySelectorAll('[id^="lvlX"]').forEach(b => b.classList.remove('active'));
+    if (boardForm.doubled) {
+        document.getElementById('lvl' + boardForm.doubled)?.classList.add('active');
+    }
+    updateContractPreview();
+}
+
+function adjustResult(n) {
+    boardForm.result += n;
+    updateResultDisplay();
+    updateContractPreview();
+}
+
+function updateResultDisplay() {
+    const el = document.getElementById('resultDisplay');
+    const lb = document.getElementById('resultLabel');
+    if (!el) return;
+    const r = boardForm.result;
+    el.textContent = r > 0 ? '+' + r : r < 0 ? String(r) : '= 0';
+    el.style.color = r > 0 ? 'var(--green)' : r < 0 ? 'var(--red)' : 'var(--gold)';
+    if (lb) {
+        if (boardForm.isPass) { lb.textContent = 'passed out'; return; }
+        if (!boardForm.level) { lb.textContent = ''; return; }
+        lb.textContent = r > 0 ? `+${r} overtrick${r > 1 ? 's' : ''}` : r < 0 ? `${Math.abs(r)} down` : 'made exactly';
+    }
+}
+
+function updateContractPreview() {
+    const el = document.getElementById('contractPreview');
+    if (!el) return;
+    let parts = [];
+    if (boardForm.isPass) {
+        el.textContent = 'PASS';
+        return;
+    }
+    if (boardForm.level) parts.push(boardForm.level);
+    if (boardForm.suit) parts.push(boardForm.suit);
+    if (boardForm.doubled) parts.push(boardForm.doubled);
+    if (boardForm.declarer) parts.push(boardForm.declarer);
+    if (boardForm.result !== 0) {
+        const r = boardForm.result;
+        parts.push(r > 0 ? '+' + r : String(r));
+    }
+    el.textContent = parts.length ? parts.join(' ') : '—';
+}
+
+function submitBoardFull(table) {
+    const err = document.getElementById('boardErrT');
+    
+    // PASS kontrolü
+    if (boardForm.isPass) {
+        const key = table + '_1_1'; // temporary board number
+        readClubDataOnce('boards').then(boards => {
+            boards = boards || {};
+            const boardNum = Object.keys(boards).filter(k => k.startsWith(table + '_1_')).length + 1;
+            const newKey = table + '_1_' + boardNum;
+            boards[newKey] = { contract: 'PASS', nsScore: 0, ewScore: 0, status: 'done', time: new Date().toISOString() };
+            return writeClubData('boards', boards);
+        }).then(() => {
+            toast('✅ PASS saved!');
+            renderBoardEntry(table);
+        }).catch(e => { err.textContent = '❌ ' + e.message; });
+        return;
+    }
+    
+    // Kontrol
+    if (!boardForm.level) { err.textContent = '❌ Select level'; return; }
+    if (!boardForm.suit) { err.textContent = '❌ Select suit'; return; }
+    if (!boardForm.declarer) { err.textContent = '❌ Select declarer (N/S/E/W)'; return; }
+    
+    const contract = boardForm.level + boardForm.suit + (boardForm.doubled || '') + ' ' + boardForm.declarer;
+    const nsScore = boardForm.result; // NS score directly from result
+    
+    readClubDataOnce('boards').then(boards => {
+        boards = boards || {};
+        const boardNum = Object.keys(boards).filter(k => k.startsWith(table + '_1_')).length + 1;
+        const key = table + '_1_' + boardNum;
+        boards[key] = { 
+            contract: contract, 
+            nsScore: nsScore, 
+            ewScore: -nsScore, 
+            status: 'done', 
+            time: new Date().toISOString(),
+            level: boardForm.level,
+            suit: boardForm.suit,
+            declarer: boardForm.declarer,
+            doubled: boardForm.doubled,
+            result: boardForm.result
+        };
+        return writeClubData('boards', boards);
+    }).then(() => {
+        toast('✅ Board saved: ' + contract + ' → ' + (nsScore > 0 ? '+' : '') + nsScore);
+        // Reset form
+        boardForm = { level: null, suit: null, declarer: null, result: 0, doubled: '' };
+        renderBoardEntry(table);
+    }).catch(e => { err.textContent = '❌ ' + e.message; });
+}
+
+// ============================================
+// SCREEN
+// ============================================
+
+function renderScreen() {
+    const c = document.getElementById('panelContent');
+    readClubData('state', state => {
+        readClubData('boards', boards => {
+            const list = boards ? Object.entries(boards).filter(([k, b]) => b.status === 'done') : [];
+            let html = `
+                <div class="card" style="text-align:center;padding:24px;">
+                    <div style="font-size:40px;">📺</div>
+                    <h2 style="color:var(--gold);">${state?.name || 'Live Results'}</h2>
+                    <p style="color:var(--text2);font-size:0.85rem;">Round ${state?.currentRound || 0} · ${list.length} boards</p>
+                </div>
+            `;
+            if (list.length > 0) {
+                html += `
+                    <div class="card">
+                        <div class="card-title">📊 Latest</div>
+                        <table class="lb-table">
+                            <thead><tr><th>Table</th><th>Board</th><th>Contract</th><th>NS</th></tr></thead>
+                            <tbody>
+                                ${list.slice(-8).reverse().map(([k, b]) => {
+                                    const [t, r, bn] = k.split('_');
+                                    const cls = b.nsScore > 0 ? 'positive' : b.nsScore < 0 ? 'negative' : '';
+                                    return `<tr><td>T${t}</td><td>B${bn}</td><td>${b.contract || 'PASS'}</td><td class="${cls}">${b.nsScore > 0 ? '+' : ''}${b.nsScore}</td></tr>`;
+                                }).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                `;
+            }
+            c.innerHTML = html;
+        });
+    });
+}
+
+// ============================================
+// ACTIONS
+// ============================================
+
+function startRound() {
+    readClubDataOnce('state').then(s => {
+        if (!s) { toast('❌ No tournament'); return; }
+        if (s.status === 'setup') { s.status = 'running'; s.currentRound = 1; }
+        else if (s.currentRound < s.roundCount) s.currentRound++;
+        else { toast('🏁 Complete!'); return; }
+        writeClubData('state', s).then(() => { toast('▶ Round ' + s.currentRound); renderAdmin(); });
+    });
+}
+
+function exportReport() {
+    readClubDataOnce('state').then(s => {
+        readClubDataOnce('boards').then(b => {
+            const data = { club: CLUB_ID, name: CLUB_NAME, state: s, boards: b, exported: new Date().toISOString() };
+            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = 'bridgegate-' + CLUB_ID + '-' + new Date().toISOString().slice(0,10) + '.json';
+            a.click();
+            toast('✅ Exported');
+        });
+    });
+}
+
+function announce() {
+    const msg = prompt('📢 Announcement:');
+    if (msg?.trim()) {
+        toast('📢 ' + msg);
+        readClubDataOnce('logs').then(logs => {
+            logs = logs || [];
+            logs.unshift({ id: Date.now(), type: 'announce', msg: msg, time: new Date().toISOString() });
+            writeClubData('logs', logs);
+        });
+    }
+}
+
+console.log('✅ BridgeGate loaded! Club:', CLUB_ID);
+console.log('🔑 Admin:2370 | Table:1234 | Super:172663');
+</script>
+</body>
+</html>
